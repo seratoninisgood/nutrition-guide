@@ -1,0 +1,9 @@
+nutrition_scraper/
+├── README.md
+├── requirements.txt
+├── data/
+│   └── output.csv
+├── scraper.py
+
+├── utils.py
+└── charts.py
