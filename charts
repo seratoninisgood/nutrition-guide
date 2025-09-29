@@ -1,0 +1,16 @@
+import pandas as pd
+
+def load_dataset(path="data/output.csv"):
+    return pd.read_csv(path)
+
+def print_nutrient_chart(df, nutrients_of_interest):
+    """
+    Prints a nicely formatted subset of the DataFrame for selected nutrients.
+    """
+    cols = ["Food"] + [n for n in nutrients_of_interest if n in df.columns]
+    print(df[cols].to_string(index=False))
+
+if __name__ == "__main__":
+    df = load_dataset()
+    wanted = ["Vitamin C", "Calcium", "Iron", "Magnesium"]
+    print_nutrient_chart(df, wanted)
