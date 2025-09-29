@@ -1,0 +1,83 @@
+import time
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+
+BASE_URL = "https://www.nutritionvalue.org"
+
+def get_food_url(food_name: str) -> str:
+    """
+    Given a food name, constructs or searches for the page URL.
+    This naive version uses search function of the site.
+    """
+    # Replace spaces with underscores or pluses as needed
+    # For simplicity, try a search URL:
+    search_url = f"{BASE_URL}/search.php?food_query={food_name}"
+    resp = requests.get(search_url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # Find the first result link
+    result = soup.find("a", href=True, text=lambda t: t and food_name.lower() in t.lower())
+    if result:
+        href = result["href"]
+        return BASE_URL + "/" + href.lstrip("/")
+    else:
+        raise ValueError(f"Could not find page for {food_name}")
+
+def parse_nutrient_table(html: str) -> dict:
+    """
+    Given HTML of a food page, parse vitamins & minerals and return as dict.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    # The site has many nutrient tables; here we try to find tables with "Vitamin" or "Mineral" in header
+    nutrient_data = {}
+    tables = soup.find_all("table")
+    for tbl in tables:
+        # Check if first row has “Vitamin” or “Mineral”
+        headers = [th.get_text(strip=True) for th in tbl.find_all("th")]
+        if any("Vitamin" in h for h in headers) or any("Mineral" in h for h in headers):
+            # iterate each row
+            for tr in tbl.find_all("tr"):
+                cols = tr.find_all(["td", "th"])
+                if len(cols) >= 2:
+                    name = cols[0].get_text(strip=True)
+                    val = cols[1].get_text(strip=True)
+                    # Clean the value (e.g. "12.3 mg") → numeric + unit
+                    nutrient_data[name] = val
+    return nutrient_data
+
+def fetch_nutrients_for(food_name: str) -> dict:
+    """
+    Fetches the nutrition page and returns a dict: {nutrient_name: value, …}
+    """
+    url = get_food_url(food_name)
+    resp = requests.get(url)
+    resp.raise_for_status()
+    data = parse_nutrient_table(resp.text)
+    return data
+
+def build_dataset(food_list):
+    """
+    Given a list of foods, build a DataFrame of all nutrients.
+    """
+    all_records = []
+    for food in food_list:
+        print("Fetching", food)
+        try:
+            rec = fetch_nutrients_for(food)
+            rec["Food"] = food
+            all_records.append(rec)
+        except Exception as e:
+            print("Error for", food, e)
+        time.sleep(1)   # polite delay
+    df = pd.DataFrame(all_records)
+    # Put “Food” column first
+    cols = ["Food"] + [c for c in df.columns if c != "Food"]
+    return df[cols]
+
+if __name__ == "__main__":
+    foods = ["apple", "banana", "carrot", "spinach"]
+    df = build_dataset(foods)
+    print(df.head())
+    df.to_csv("data/output.csv", index=False)
